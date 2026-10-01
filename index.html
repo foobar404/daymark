@@ -1,0 +1,98 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="theme-color" content="#eef3ed">
+    <title>Daymark</title>
+    <link rel="icon" type="image/png" sizes="any" href="./public/logo.png?v=20260930-1">
+    <link rel="apple-touch-icon" href="./public/logo.png?v=20260930-1">
+    <link rel="stylesheet" href="./src/styles.css">
+    <script type="module" src="./src/main.js"></script>
+  </head>
+  <body>
+    <div class="app-layout">
+      <header class="masthead">
+        <a class="brand" href="./" aria-label="Daymark home">
+          <img class="brand__logo" src="./public/logo.png" alt="">
+          <span>Daymark</span>
+        </a>
+        <button class="settings-open" id="settings-open" type="button" aria-label="Settings" title="Settings">⚙</button>
+      </header>
+      <nav class="widget-nav" id="widget-nav" aria-label="Widgets"></nav>
+      <main class="page-shell">
+        <section class="widget-grid" aria-label="Homepage widgets">
+          <search-widget id="search"></search-widget>
+          <news-feed-widget id="news"></news-feed-widget>
+          <clock-widget id="clock"></clock-widget>
+          <weather-widget id="weather"></weather-widget>
+          <links-widget id="links"></links-widget>
+          <notes-widget id="notes"></notes-widget>
+          <task-list-widget id="tasks"></task-list-widget>
+          <calculator-widget id="calculator"></calculator-widget>
+          <calendar-widget id="calendar"></calendar-widget>
+          <launchpad-widget id="launchpad"></launchpad-widget>
+        </section>
+
+        <footer class="page-footer">
+          <span>Daymark</span>
+          <span>Your space, your pace.</span>
+        </footer>
+      </main>
+    </div>
+    <dialog class="settings-dialog" id="settings-dialog" aria-labelledby="settings-title">
+      <header class="settings-dialog__header">
+        <h2 id="settings-title">Settings</h2>
+        <button class="settings-dialog__close" id="settings-close" type="button" aria-label="Close settings">×</button>
+      </header>
+      <fieldset class="background-modes container-background-options">
+        <legend>Background Style</legend>
+        <label><input type="radio" name="container-background" value="solid"><span>Solid</span></label>
+        <label><input type="radio" name="container-background" value="transparent"><span>Transparent</span></label>
+        <label><input type="radio" name="container-background" value="glass"><span>Glass</span></label>
+      </fieldset>
+      <fieldset class="background-modes">
+        <legend>Wallpaper</legend>
+        <label><input type="radio" name="background-mode" value="color"><span>Solid colors</span></label>
+        <label><input type="radio" name="background-mode" value="photo"><span>Photos</span></label>
+      </fieldset>
+      <fieldset class="theme-options">
+        <legend>Theme</legend>
+      </fieldset>
+      <fieldset class="photo-options" hidden>
+        <legend>Browse Wikimedia Commons</legend>
+        <form class="photo-search">
+          <label class="visually-hidden" for="photo-search-query">Search photos</label>
+          <input id="photo-search-query" type="search" value="landscape" placeholder="Search photos on Commons">
+          <button class="button button--accent" type="submit">Search</button>
+        </form>
+        <p class="photo-gallery__status" role="status" aria-live="polite">Search for landscape, ocean, forest, or another subject.</p>
+        <div class="photo-gallery__results"></div>
+        <button class="text-button photo-gallery__more" type="button" hidden>Load more photos</button>
+      </fieldset>
+      <fieldset class="size-options">
+        <legend>Widget size</legend>
+        <label class="size-option">
+          <input type="radio" name="widget-size" value="ultra-dense">
+          <span>Ultra-dense</span>
+        </label>
+        <label class="size-option">
+          <input type="radio" name="widget-size" value="tiny">
+          <span>Tiny</span>
+        </label>
+        <label class="size-option">
+          <input type="radio" name="widget-size" value="dense">
+          <span>Dense</span>
+        </label>
+        <label class="size-option">
+          <input type="radio" name="widget-size" value="compact">
+          <span>Compact</span>
+        </label>
+        <label class="size-option">
+          <input type="radio" name="widget-size" value="standard">
+          <span>Standard</span>
+        </label>
+      </fieldset>
+    </dialog>
+  </body>
+</html>
