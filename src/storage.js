@@ -2,57 +2,17 @@ const STORAGE_KEY = 'daymark-home:v1';
 import { THEME_IDS } from './themes.js';
 import { SEARCH_ENGINES } from './search-engines.js';
 import { BACKGROUND_IMAGE_IDS, isCommonsBackgroundUrl } from './background-images.js';
+import {
+  createDefaultWidgetPlacements as createPlacements,
+  normalizeWidgetPlacements,
+} from './widget-layout.js';
 
-export const WIDGET_GRID_COLUMNS = 12;
-export const WIDGET_GRID_SPANS = {
-  search: 12,
-  news: 7,
-  clock: 6,
-  weather: 5,
-  links: 6,
-  notes: 7,
-  tasks: 7,
-  calculator: 5,
-  calendar: 7,
-  launchpad: 5,
-};
+export { WIDGET_GRID_COLUMNS, WIDGET_DEFAULT_SIZES, WIDGET_MIN_SIZES } from './widget-layout.js';
 
-export const DEFAULT_WIDGET_ORDER = ['search', 'news', 'clock', 'weather', 'links', 'notes', 'tasks', 'calculator', 'calendar', 'launchpad'];
+export const DEFAULT_WIDGET_ORDER = ['search', 'news', 'clock', 'weather', 'links', 'notes', 'tasks', 'calculator', 'calendar'];
 
 export function createDefaultWidgetPlacements(order = DEFAULT_WIDGET_ORDER) {
-  const placements = {};
-  let column = 1;
-  let row = 1;
-  order.forEach((id) => {
-    const span = WIDGET_GRID_SPANS[id];
-    if (column + span - 1 > WIDGET_GRID_COLUMNS) {
-      row += 1;
-      column = 1;
-    }
-    placements[id] = { column, row };
-    column += span;
-    if (column > WIDGET_GRID_COLUMNS) {
-      row += 1;
-      column = 1;
-    }
-  });
-  return placements;
-}
-
-function normalizeWidgetPlacements(value, order) {
-  const defaults = createDefaultWidgetPlacements(order);
-  const placements = {};
-  order.forEach((id) => {
-    const saved = value?.[id];
-    const span = WIDGET_GRID_SPANS[id];
-    const column = Number.isInteger(saved?.column) ? saved.column : defaults[id].column;
-    const row = Number.isInteger(saved?.row) ? Math.min(Math.max(saved.row, 1), 10000) : defaults[id].row;
-    const validColumn = column >= 1 && column + span - 1 <= WIDGET_GRID_COLUMNS;
-    const nextColumn = validColumn ? column : defaults[id].column;
-
-    placements[id] = { column: nextColumn, row };
-  });
-  return placements;
+  return createPlacements(order);
 }
 
 export const DEFAULT_SETTINGS = {
@@ -76,7 +36,6 @@ export const DEFAULT_SETTINGS = {
   calendarEmbed: '',
   weatherLocation: null,
   newsFeedUrl: 'https://news.google.com/rss?hl=en-US&gl=US&ceid=US:en',
-  launchpad: [],
   clockSeconds: false,
   clockCities: [],
   hiddenWidgets: [],
@@ -89,7 +48,6 @@ export const DEFAULT_SETTINGS = {
   dailyBackgroundEnabled: false,
   dailyBackgroundSearchTerm: 'landscape',
   dailyBackgroundDate: '',
-  widgetSize: 'standard',
   searchEngine: 'chatgpt',
 };
 
@@ -136,9 +94,6 @@ function normalizeSettings(value) {
   const activeScreen = screens.find((screen) => screen.id === value.activeScreenId) ?? screens[0];
   const order = activeScreen.order;
   const hiddenWidgets = activeScreen.hiddenWidgets;
-  const widgetSizes = ['tiny', 'compact', 'standard', 'dense', 'ultra-dense'];
-  const legacyWidgetSizes = new Map([['spacious', 'dense'], ['large', 'ultra-dense']]);
-  const savedWidgetSize = legacyWidgetSizes.get(value.widgetSize) ?? value.widgetSize;
   const links = Array.isArray(value.links)
     ? value.links.flatMap((link) => {
       if (!link || typeof link.title !== 'string' || typeof link.url !== 'string') return [];
@@ -170,23 +125,6 @@ function normalizeSettings(value) {
         return [];
       }
     }).slice(0, 8)
-    : [];
-  const launchpad = Array.isArray(value.launchpad)
-    ? value.launchpad.flatMap((item) => {
-      if (!item || typeof item.title !== 'string' || typeof item.url !== 'string') return [];
-      try {
-        const url = new URL(item.url);
-        const allowed = ['http:', 'https:', 'file:', 'vscode:', 'spotify:', 'steam:', 'obsidian:'];
-        if (!allowed.includes(url.protocol)) return [];
-        return [{
-          title: item.title.trim().slice(0, 32) || url.hostname || url.protocol.slice(0, -1),
-          url: url.href,
-          color: typeof item.color === 'string' && /^#[\da-f]{6}$/i.test(item.color) ? item.color : '#dceee1',
-        }];
-      } catch {
-        return [];
-      }
-    })
     : [];
   let calendarEmbed = '';
   if (typeof value.calendarEmbed === 'string' && value.calendarEmbed) {
@@ -249,7 +187,6 @@ function normalizeSettings(value) {
     calendarEmbed,
     weatherLocation,
     newsFeedUrl,
-    launchpad,
     clockSeconds: Boolean(value.clockSeconds),
     clockCities,
     hiddenWidgets,
@@ -262,7 +199,6 @@ function normalizeSettings(value) {
     dailyBackgroundEnabled: Boolean(value.dailyBackgroundEnabled),
     dailyBackgroundSearchTerm: dailyBackgroundSearchTerm || DEFAULT_SETTINGS.dailyBackgroundSearchTerm,
     dailyBackgroundDate,
-    widgetSize: widgetSizes.includes(savedWidgetSize) ? savedWidgetSize : DEFAULT_SETTINGS.widgetSize,
     searchEngine: SEARCH_ENGINES.some(({ id }) => id === value.searchEngine) ? value.searchEngine : DEFAULT_SETTINGS.searchEngine,
   };
 }

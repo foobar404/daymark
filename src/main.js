@@ -7,16 +7,20 @@ import './components/weather-widget.js';
 import './components/task-list-widget.js';
 import './components/calculator-widget.js';
 import './components/calendar-widget.js';
-import './components/launchpad-widget.js';
 import { WIDGET_ICONS } from './components/widget-element.js';
 import {
   createDefaultWidgetPlacements,
   DEFAULT_WIDGET_ORDER,
   readSettings,
   writeSettings,
-  WIDGET_GRID_COLUMNS,
-  WIDGET_GRID_SPANS,
 } from './storage.js';
+import {
+  MAX_WIDGET_HEIGHT,
+  MAX_WIDGET_ROW,
+  reflowWidgetPlacements,
+  resizeWidgetPlacement,
+  WIDGET_GRID_COLUMNS,
+} from './widget-layout.js';
 import { THEMES } from './themes.js';
 import { BACKGROUND_IMAGES, isCommonsBackgroundUrl } from './background-images.js';
 
@@ -26,10 +30,13 @@ const screenNav = document.querySelector('#screen-nav');
 const screenNavStatus = document.querySelector('#screen-nav-status');
 const settingsDialog = document.querySelector('#settings-dialog');
 const themeColorMeta = document.querySelector('meta[name="theme-color"]');
+const widgetSelector = 'clock-widget, search-widget, news-feed-widget, weather-widget, links-widget, notes-widget, task-list-widget, calculator-widget, calendar-widget';
+const widgetInteractiveSelector = 'a, button, input, select, textarea, label, summary, iframe, audio, video, [contenteditable]:not([contenteditable="false"]), [role="button"], [role="link"], [role="checkbox"], [role="radio"], [role="switch"], [role="slider"], [tabindex]:not([tabindex="-1"]):not([data-drag-keyboard])';
 const settings = readSettings();
-let widgetDrag = null;
+let widgetInteraction = null;
 let widgetGridCellSize = 24;
 let gridLayoutRefreshScheduled = false;
+const reflowAnimations = new WeakMap();
 const widgetOptions = [
   { id: 'search', title: 'Search' },
   { id: 'news', title: 'News' },
@@ -40,7 +47,6 @@ const widgetOptions = [
   { id: 'tasks', title: 'To-do list' },
   { id: 'calculator', title: 'Calculator' },
   { id: 'calendar', title: 'Calendar' },
-  { id: 'launchpad', title: 'Launchpad' },
 ];
 
 const themeOptions = document.querySelector('.theme-options');
@@ -341,8 +347,6 @@ syncBackgroundOptions(settings);
 syncDailyPhotoOptions(settings);
 document.querySelector(`input[name="theme"][value="${settings.theme}"]`).checked = true;
 document.querySelector(`input[name="container-background"][value="${settings.containerBackground}"]`).checked = true;
-document.documentElement.dataset.widgetSize = settings.widgetSize;
-document.querySelector(`input[name="widget-size"][value="${settings.widgetSize}"]`).checked = true;
 document.querySelector('#settings-open').addEventListener('click', () => settingsDialog.showModal());
 document.querySelector('#settings-close').addEventListener('click', () => settingsDialog.close());
 settingsDialog.addEventListener('click', (event) => {
@@ -353,19 +357,13 @@ settingsDialog.addEventListener('click', (event) => {
   }
 });
 settingsDialog.addEventListener('change', (event) => {
-  if (!['theme', 'widget-size', 'background-mode', 'container-background'].includes(event.target.name)) return;
+  if (!['theme', 'background-mode', 'container-background'].includes(event.target.name)) return;
   const current = readSettings();
   if (event.target.name === 'theme') current.theme = event.target.value;
-  if (event.target.name === 'widget-size') current.widgetSize = event.target.value;
   if (event.target.name === 'background-mode') current.backgroundMode = event.target.value;
   if (event.target.name === 'container-background') current.containerBackground = event.target.value;
   writeSettings(current);
   if (event.target.name === 'theme') applyTheme(current.theme);
-  if (event.target.name === 'widget-size') {
-    document.documentElement.dataset.widgetSize = current.widgetSize;
-    syncGridCellSize();
-    scheduleWidgetLayoutRefresh();
-  }
   if (event.target.name === 'container-background') applyContainerBackground(current.containerBackground);
   if (event.target.name === 'background-mode') {
     applyBackground(current);
@@ -411,51 +409,54 @@ function getPlacementOrder(placements) {
 }
 
 function applyWidgetLayout(screen) {
+  cancelReflowAnimations();
   syncGridCellSize();
-  applyOrder(getPlacementOrder(screen.placements));
-  [...grid.children].forEach((widget) => {
-    const position = screen.placements[widget.id];
-    if (!position) return;
-    widget.style.gridColumn = `${position.column} / span ${WIDGET_GRID_SPANS[widget.id]}`;
-    widget.style.gridRow = `${position.row} / span 1`;
-  });
-  const rowSpans = measureWidgetRowSpans();
   screen.order = getPlacementOrder(screen.placements);
   applyOrder(screen.order);
-  applyWidgetGridPositions(screen.placements, rowSpans);
+  applyWidgetGridPositions(screen.placements);
 }
 
-function measureWidgetRowSpans() {
-  const rowGap = Number.parseFloat(window.getComputedStyle(grid).rowGap) || 0;
-  const rowPitch = widgetGridCellSize + rowGap;
-  const rowSpans = {};
-  [...grid.children].forEach((widget) => {
-    let rowSpan = Number.parseInt(widget.dataset.gridRowSpan, 10) || 1;
-    if (!widget.hidden) {
-      const panel = widget.querySelector('.widget__panel');
-      const header = widget.querySelector('.widget__header');
-      const content = widget.querySelector('.widget__content');
-      if (panel && header && content) {
-        const panelStyle = window.getComputedStyle(panel);
-        const naturalHeight = header.getBoundingClientRect().height
-          + content.scrollHeight
-          + (Number.parseFloat(panelStyle.borderTopWidth) || 0)
-          + (Number.parseFloat(panelStyle.borderBottomWidth) || 0);
-        rowSpan = Math.max(1, Math.ceil((naturalHeight + rowGap) / rowPitch));
-      }
-    }
-    widget.dataset.gridRowSpan = String(rowSpan);
-    rowSpans[widget.id] = rowSpan;
-  });
-  return rowSpans;
-}
-
-function applyWidgetGridPositions(placements, rowSpans) {
+function applyWidgetGridPositions(placements) {
   [...grid.children].forEach((widget) => {
     const position = placements[widget.id];
     if (!position) return;
-    widget.style.gridColumn = `${position.column} / span ${WIDGET_GRID_SPANS[widget.id]}`;
-    widget.style.gridRow = `${position.row} / span ${rowSpans[widget.id] ?? 1}`;
+    widget.style.gridColumn = `${position.column} / span ${position.width}`;
+    widget.style.gridRow = `${position.row} / span ${position.height}`;
+  });
+}
+
+function cancelReflowAnimations() {
+  [...grid.children].forEach((widget) => {
+    const animation = reflowAnimations.get(widget);
+    if (!animation) return;
+    animation.cancel();
+    reflowAnimations.delete(widget);
+  });
+}
+
+function applyWidgetLayoutPreview(placements, activeWidget) {
+  const widgets = [...grid.children];
+  const previousBounds = new Map(widgets.map((widget) => [widget, widget.getBoundingClientRect()]));
+  cancelReflowAnimations();
+  applyOrder(getPlacementOrder(placements));
+  applyWidgetGridPositions(placements);
+
+  if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) return;
+  widgets.forEach((widget) => {
+    if (widget === activeWidget || widget.hidden || typeof widget.animate !== 'function') return;
+    const previous = previousBounds.get(widget);
+    const next = widget.getBoundingClientRect();
+    const deltaX = previous.left - next.left;
+    const deltaY = previous.top - next.top;
+    if (Math.abs(deltaX) < 1 && Math.abs(deltaY) < 1) return;
+    const animation = widget.animate([
+      { transform: `translate(${deltaX}px, ${deltaY}px)` },
+      { transform: 'translate(0, 0)' },
+    ], { duration: 140, easing: 'ease-out' });
+    reflowAnimations.set(widget, animation);
+    animation.onfinish = () => {
+      if (reflowAnimations.get(widget) === animation) reflowAnimations.delete(widget);
+    };
   });
 }
 
@@ -467,7 +468,7 @@ function persistWidgetPlacements(placements) {
   applyWidgetLayout(screen);
   current.order = screen.order;
   if (!writeSettings(current)) {
-    showScreenStatus('Could not save this screen’s widget positions.');
+    showScreenStatus('Could not save this screen’s widget layout.');
     const saved = readSettings().screens.find(({ id }) => id === current.activeScreenId);
     if (saved) applyWidgetLayout(saved);
     return false;
@@ -477,14 +478,10 @@ function persistWidgetPlacements(placements) {
 }
 
 function refreshActiveWidgetLayout() {
-  syncGridCellSize();
   const current = readSettings();
   const screen = current.screens.find(({ id }) => id === current.activeScreenId);
   if (!screen) return;
-  const rowSpans = measureWidgetRowSpans();
-  const order = getPlacementOrder(screen.placements);
-  applyOrder(order);
-  applyWidgetGridPositions(screen.placements, rowSpans);
+  applyWidgetLayout(screen);
 }
 
 function scheduleWidgetLayoutRefresh() {
@@ -492,7 +489,7 @@ function scheduleWidgetLayoutRefresh() {
   gridLayoutRefreshScheduled = true;
   window.requestAnimationFrame(() => {
     gridLayoutRefreshScheduled = false;
-    if (!widgetDrag) refreshActiveWidgetLayout();
+      if (!widgetInteraction) refreshActiveWidgetLayout();
   });
 }
 
@@ -695,17 +692,6 @@ function getGridMetrics() {
   };
 }
 
-function getRowOffset(metrics, row) {
-  const index = row - 1;
-  if (index < metrics.rowStarts.length) return metrics.rowStarts[index];
-  if (!metrics.rowStarts.length) return index * (metrics.minRowSize + metrics.rowGap);
-  const lastIndex = metrics.rowStarts.length - 1;
-  return metrics.rowStarts[lastIndex]
-    + metrics.rowSizes[lastIndex]
-    + metrics.rowGap
-    + (index - metrics.rowStarts.length) * (metrics.minRowSize + metrics.rowGap);
-}
-
 function nearestIndex(values, target) {
   let nearest = 0;
   values.forEach((value, index) => {
@@ -714,100 +700,145 @@ function nearestIndex(values, target) {
   return nearest;
 }
 
-function getSnappedPlacement(event, drag) {
+function getSnappedPlacement(event, interaction) {
   const bounds = grid.getBoundingClientRect();
-  const desiredColumn = event.clientX - drag.grabOffsetX - bounds.left - drag.metrics.borderLeft - drag.metrics.paddingLeft;
-  const desiredRow = event.clientY - drag.grabOffsetY - bounds.top - drag.metrics.borderTop - drag.metrics.paddingTop;
-  const span = WIDGET_GRID_SPANS[drag.widget.id];
-  const maxColumn = WIDGET_GRID_COLUMNS - span + 1;
-  const columnStarts = drag.metrics.columnStarts.length > 1
-    ? drag.metrics.columnStarts.slice(0, maxColumn)
+  const desiredColumn = event.clientX - interaction.grabOffsetX - bounds.left - interaction.metrics.borderLeft - interaction.metrics.paddingLeft;
+  const desiredRow = event.clientY - interaction.grabOffsetY - bounds.top - interaction.metrics.borderTop - interaction.metrics.paddingTop;
+  const maxColumn = WIDGET_GRID_COLUMNS - interaction.originalPlacement.width + 1;
+  const columnStarts = interaction.metrics.columnStarts.length > 1
+    ? interaction.metrics.columnStarts.slice(0, maxColumn)
     : [0];
-  const column = drag.metrics.columnStarts.length > 1
+  const column = interaction.metrics.columnStarts.length > 1
     ? nearestIndex(columnStarts, desiredColumn) + 1
-    : drag.originalPlacement.column;
-  const rowStarts = [...drag.metrics.rowStarts];
-  const rowSizes = [...drag.metrics.rowSizes];
+    : interaction.originalPlacement.column;
+  const rowStarts = [...interaction.metrics.rowStarts];
+  const rowSizes = [...interaction.metrics.rowSizes];
   if (!rowStarts.length) {
     rowStarts.push(0);
-    rowSizes.push(drag.metrics.minRowSize);
+    rowSizes.push(interaction.metrics.minRowSize);
   }
-  while (desiredRow > rowStarts[rowStarts.length - 1] + rowSizes[rowSizes.length - 1] / 2 && rowStarts.length < 10000) {
-    const nextStart = rowStarts[rowStarts.length - 1] + rowSizes[rowSizes.length - 1] + drag.metrics.rowGap;
+  while (
+    desiredRow > rowStarts[rowStarts.length - 1] + rowSizes[rowSizes.length - 1] / 2
+    && rowStarts.length < MAX_WIDGET_ROW
+  ) {
+    const nextStart = rowStarts[rowStarts.length - 1] + rowSizes[rowSizes.length - 1] + interaction.metrics.rowGap;
     rowStarts.push(nextStart);
-    rowSizes.push(drag.metrics.minRowSize);
+    rowSizes.push(interaction.metrics.minRowSize);
   }
   return {
+    ...interaction.originalPlacement,
     column: Math.min(Math.max(column, 1), maxColumn),
-    row: nearestIndex(rowStarts, desiredRow) + 1,
+    row: Math.min(nearestIndex(rowStarts, desiredRow) + 1, MAX_WIDGET_ROW),
   };
 }
 
-function beginWidgetDrag(event) {
-  if (widgetDrag || event.button !== 0 || !event.isPrimary) return;
+function getResizedPlacement(event, interaction) {
+  const { metrics, originalPlacement, widget, resizeCorner } = interaction;
+  const columnPitch = metrics.columnStarts.length > 1
+    ? metrics.columnStarts[1] - metrics.columnStarts[0]
+    : metrics.minRowSize + metrics.columnGap;
+  const rowPitch = metrics.rowStarts.length > 1
+    ? metrics.rowStarts[1] - metrics.rowStarts[0]
+    : metrics.minRowSize + metrics.rowGap;
+  const pointerWidthChange = Math.round((event.clientX - interaction.startX) / Math.max(columnPitch, 1));
+  const pointerHeightChange = Math.round((event.clientY - interaction.startY) / Math.max(rowPitch, 1));
+  const widthChange = pointerWidthChange * (resizeCorner.endsWith('left') ? -1 : 1);
+  const heightChange = pointerHeightChange * (resizeCorner.startsWith('top') ? -1 : 1);
+  return resizeWidgetPlacement(originalPlacement, widget.id, widthChange, heightChange, resizeCorner);
+}
+
+function samePlacements(first, second, order) {
+  return order.every((id) => {
+    const firstPosition = first[id];
+    const secondPosition = second[id];
+    return firstPosition.column === secondPosition.column
+      && firstPosition.row === secondPosition.row
+      && firstPosition.width === secondPosition.width
+      && firstPosition.height === secondPosition.height;
+  });
+}
+
+function beginWidgetInteraction(event) {
+  if (widgetInteraction || event.button !== 0 || !event.isPrimary) return;
   if (!(event.target instanceof Element)) return;
-  const dragRegion = event.target.closest('[data-drag-border]');
-  const widget = event.target.closest('clock-widget, search-widget, news-feed-widget, weather-widget, links-widget, notes-widget, task-list-widget, calculator-widget, calendar-widget, launchpad-widget');
-  if (!dragRegion || !widget || widget.hidden || !grid.contains(widget)) return;
+  const widget = event.target.closest(widgetSelector);
+  if (!widget || widget.hidden || !grid.contains(widget)) return;
+  const resizeHandle = event.target.closest('[data-resize-handle]');
+  const resizeCorner = resizeHandle?.dataset.resizeHandle;
+  const type = resizeHandle
+    ? 'resize'
+    : event.target.closest(widgetInteractiveSelector)
+      ? null
+      : 'drag';
+  if (!type) return;
+  if (type === 'resize' && !resizeCorner) throw new Error('Resize handles must identify a widget corner.');
+  if (type === 'resize' && window.matchMedia('(max-width: 680px)').matches) return;
+  if (type === 'drag') event.preventDefault();
 
   const current = readSettings();
   const screen = current.screens.find(({ id }) => id === current.activeScreenId);
   const originalPlacement = screen?.placements[widget.id];
   if (!originalPlacement) return;
   const widgetBounds = widget.getBoundingClientRect();
-  widgetDrag = {
+  const placements = structuredClone(screen.placements);
+  const order = getPlacementOrder(placements);
+  widgetInteraction = {
+    type,
     widget,
     pointerId: event.pointerId,
     startX: event.clientX,
     startY: event.clientY,
     grabOffsetX: event.clientX - widgetBounds.left,
     grabOffsetY: event.clientY - widgetBounds.top,
-    initialTop: widgetBounds.top,
+    resizeCorner,
     metrics: getGridMetrics(),
     originalPlacement: { ...originalPlacement },
-    placement: { ...originalPlacement },
-    dragging: false,
+    originalPlacements: placements,
+    previewPlacements: placements,
+    order,
+    active: false,
   };
 }
 
-function moveWidgetDrag(event) {
-  if (!widgetDrag || event.pointerId !== widgetDrag.pointerId) return;
-  if (!widgetDrag.dragging && Math.hypot(event.clientX - widgetDrag.startX, event.clientY - widgetDrag.startY) < 4) return;
-  if (!widgetDrag.dragging) {
-    widgetDrag.dragging = true;
-    widgetDrag.widget.classList.add('is-dragging');
-    grid.classList.add('is-grid-dragging');
+function moveWidgetInteraction(event) {
+  if (!widgetInteraction || event.pointerId !== widgetInteraction.pointerId) return;
+  if (
+    !widgetInteraction.active
+    && Math.hypot(event.clientX - widgetInteraction.startX, event.clientY - widgetInteraction.startY) < 4
+  ) return;
+  if (!widgetInteraction.active) {
+    widgetInteraction.active = true;
+    widgetInteraction.widget.classList.add(widgetInteraction.type === 'resize' ? 'is-resizing' : 'is-dragging');
+    grid.classList.add('is-grid-interacting');
     grid.setPointerCapture(event.pointerId);
   }
   event.preventDefault();
-  widgetDrag.placement = getSnappedPlacement(event, widgetDrag);
-  widgetDrag.widget.style.gridColumn = `${widgetDrag.placement.column} / span ${WIDGET_GRID_SPANS[widgetDrag.widget.id]}`;
-  widgetDrag.widget.style.gridRow = `${widgetDrag.placement.row} / span 1`;
-  if (widgetDrag.metrics.columnStarts.length === 1) {
-    const targetTop = grid.getBoundingClientRect().top
-      + widgetDrag.metrics.borderTop
-      + widgetDrag.metrics.paddingTop
-      + getRowOffset(widgetDrag.metrics, widgetDrag.placement.row);
-    widgetDrag.widget.style.transform = `translateY(${targetTop - widgetDrag.initialTop}px)`;
-  }
+  const targetPlacement = widgetInteraction.type === 'resize'
+    ? getResizedPlacement(event, widgetInteraction)
+    : getSnappedPlacement(event, widgetInteraction);
+  const requestedPlacements = structuredClone(widgetInteraction.originalPlacements);
+  requestedPlacements[widgetInteraction.widget.id] = targetPlacement;
+  const previewPlacements = reflowWidgetPlacements(
+    requestedPlacements,
+    widgetInteraction.order,
+    widgetInteraction.widget.id,
+  );
+  if (samePlacements(widgetInteraction.previewPlacements, previewPlacements, widgetInteraction.order)) return;
+  widgetInteraction.previewPlacements = previewPlacements;
+  applyWidgetLayoutPreview(previewPlacements, widgetInteraction.widget);
 }
 
-function finishWidgetDrag(event, cancelled = false) {
-  if (!widgetDrag || event.pointerId !== widgetDrag.pointerId) return;
-  const drag = widgetDrag;
-  widgetDrag = null;
-  drag.widget.classList.remove('is-dragging');
-  drag.widget.style.transform = '';
-  grid.classList.remove('is-grid-dragging');
+function finishWidgetInteraction(event, cancelled = false) {
+  if (!widgetInteraction || event.pointerId !== widgetInteraction.pointerId) return;
+  const interaction = widgetInteraction;
+  widgetInteraction = null;
+  interaction.widget.classList.remove(interaction.type === 'resize' ? 'is-resizing' : 'is-dragging');
+  grid.classList.remove('is-grid-interacting');
 
-  if (drag.dragging && !cancelled) {
+  if (interaction.active && !cancelled) {
     const current = readSettings();
     const screen = current.screens.find(({ id }) => id === current.activeScreenId);
-    if (screen) {
-      const placements = structuredClone(screen.placements);
-      placements[drag.widget.id] = drag.placement;
-      persistWidgetPlacements(placements);
-    }
+    if (screen) persistWidgetPlacements(interaction.previewPlacements);
   } else {
     const current = readSettings();
     const screen = current.screens.find(({ id }) => id === current.activeScreenId);
@@ -815,21 +846,37 @@ function finishWidgetDrag(event, cancelled = false) {
   }
 }
 
-function moveWidgetByCell(widgetId, columnChange, rowChange) {
+function moveWidgetByUnit(widget, columnChange, rowChange) {
   const current = readSettings();
   const screen = current.screens.find(({ id }) => id === current.activeScreenId);
-  const placement = screen?.placements[widgetId];
+  const placement = screen?.placements[widget.id];
   if (!screen || !placement) return;
-  const span = WIDGET_GRID_SPANS[widgetId];
   const placements = structuredClone(screen.placements);
-  placements[widgetId] = {
-    column: Math.min(Math.max(placement.column + columnChange, 1), WIDGET_GRID_COLUMNS - span + 1),
-    row: Math.min(Math.max(placement.row + rowChange, 1), 10000),
+  placements[widget.id] = {
+    ...placement,
+    column: Math.min(Math.max(placement.column + columnChange, 1), WIDGET_GRID_COLUMNS - placement.width + 1),
+    row: Math.min(Math.max(placement.row + rowChange, 1), MAX_WIDGET_ROW),
   };
-  if (!persistWidgetPlacements(placements)) return;
-  const next = placements[widgetId];
-  const title = widgetOptions.find(({ id }) => id === widgetId)?.title ?? 'Widget';
+  const reflowed = reflowWidgetPlacements(placements, getPlacementOrder(placements), widget.id);
+  if (!persistWidgetPlacements(reflowed)) return;
+  const next = reflowed[widget.id];
+  const title = widgetOptions.find(({ id }) => id === widget.id)?.title ?? 'Widget';
   showScreenStatus(`${title} moved to column ${next.column}, row ${next.row}.`);
+}
+
+function resizeWidgetByUnit(widget, widthChange, heightChange, corner) {
+  const current = readSettings();
+  const screen = current.screens.find(({ id }) => id === current.activeScreenId);
+  const placement = screen?.placements[widget.id];
+  if (!screen || !placement) return;
+  const placements = structuredClone(screen.placements);
+  placements[widget.id] = resizeWidgetPlacement(placement, widget.id, widthChange, heightChange, corner);
+  if (placements[widget.id].width === placement.width && placements[widget.id].height === placement.height) return;
+  const reflowed = reflowWidgetPlacements(placements, getPlacementOrder(placements), widget.id);
+  if (!persistWidgetPlacements(reflowed)) return;
+  const next = reflowed[widget.id];
+  const title = widgetOptions.find(({ id }) => id === widget.id)?.title ?? 'Widget';
+  showScreenStatus(`${title} resized to ${next.width} by ${next.height} units.`);
 }
 
 const gridMoveKeys = {
@@ -839,18 +886,35 @@ const gridMoveKeys = {
   ArrowDown: [0, 1],
 };
 
-grid.addEventListener('pointerdown', beginWidgetDrag);
-document.addEventListener('pointermove', moveWidgetDrag);
-document.addEventListener('pointerup', finishWidgetDrag);
-document.addEventListener('pointercancel', (event) => finishWidgetDrag(event, true));
+grid.addEventListener('pointerdown', beginWidgetInteraction);
+document.addEventListener('pointermove', moveWidgetInteraction);
+document.addEventListener('pointerup', finishWidgetInteraction);
+document.addEventListener('pointercancel', (event) => finishWidgetInteraction(event, true));
 grid.addEventListener('keydown', (event) => {
   if (!(event.target instanceof Element)) return;
-  const handle = event.target.closest('[data-drag-keyboard]');
+  const resizeHandle = event.target.closest('[data-resize-handle]');
+  const widget = event.target.closest(widgetSelector);
+  if (!widget) return;
+  if (resizeHandle) {
+    const corner = resizeHandle.dataset.resizeHandle;
+    const growsFromLeft = corner.endsWith('left');
+    const growsFromTop = corner.startsWith('top');
+    const resizeMovement = {
+      ArrowLeft: [growsFromLeft ? 1 : -1, 0],
+      ArrowRight: [growsFromLeft ? -1 : 1, 0],
+      ArrowUp: [0, growsFromTop ? 1 : -1],
+      ArrowDown: [0, growsFromTop ? -1 : 1],
+    }[event.key];
+    if (!resizeMovement) return;
+    event.preventDefault();
+    resizeWidgetByUnit(widget, ...resizeMovement, corner);
+    return;
+  }
+  if (!event.target.closest('[data-drag-keyboard]')) return;
   const movement = gridMoveKeys[event.key];
-  if (!handle || !movement) return;
+  if (!movement) return;
   event.preventDefault();
-  const widget = handle.closest('clock-widget, search-widget, news-feed-widget, weather-widget, links-widget, notes-widget, task-list-widget, calculator-widget, calendar-widget, launchpad-widget');
-  if (widget) moveWidgetByCell(widget.id, ...movement);
+  moveWidgetByUnit(widget, ...movement);
 });
 
 applyVisibility(settings.hiddenWidgets);
@@ -876,8 +940,6 @@ const gridResizeObserver = new ResizeObserver(() => {
   if (syncGridCellSize()) scheduleWidgetLayoutRefresh();
 });
 gridResizeObserver.observe(grid);
-const widgetResizeObserver = new ResizeObserver(scheduleWidgetLayoutRefresh);
-grid.querySelectorAll(':scope > *').forEach((widget) => widgetResizeObserver.observe(widget));
 window.addEventListener('resize', () => {
   if (syncGridCellSize()) scheduleWidgetLayoutRefresh();
 });

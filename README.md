@@ -16,7 +16,7 @@
 
 Daymark is a lightweight, customizable start page made with browser-native HTML, CSS, JavaScript modules, and Web Components. There are no packages to install and no account to create.
 
-Use the left icon rail to show or hide widgets, drag a widget by its grip to rearrange the page, and open **Settings** to choose a theme or widget density. Your layout and widget data are saved in this browser.
+Use the left icon rail to show or hide widgets, drag widgets to rearrange them, and resize them from any corner. Open **Settings** to choose a theme. Your layout and widget data are saved in this browser.
 
 ## Widgets
 
@@ -31,16 +31,14 @@ Use the left icon rail to show or hide widgets, drag a widget by its grip to rea
 | To-do list | Add tasks, mark them complete, and clear finished items. |
 | Calculator | Evaluate basic arithmetic and parentheses without `eval`. |
 | Google Calendar | Paste its Calendar ID, an embed URL, or copied iframe code. The widget builds the embed URL for you. |
-| Local launchpad | Save links to websites, local files, or supported app URLs. |
 
 ## Personalize
 
 - **Backgrounds:** Choose a theme color independently from the background photo. Photos can be switched off, selected from the searchable Wikimedia Commons gallery, or changed daily using a search term.
-- **Five widget densities:** Ultra-dense, Tiny, Dense, Compact, and Standard. Standard is the largest.
 - **Widget visibility:** Toggle individual widgets from the left icon rail.
-- **Widget layout:** Arrange widgets on a 12-column grid by dragging any widget border. Existing widget sizes are preserved, overlaps are allowed, grid cells have equal horizontal and vertical steps on wide screens, positions are saved per screen, and arrow keys on the focusable top border move a widget one cell at a time. Narrow screens keep a stacked layout.
+- **Widget layout:** Each widget occupies an integer rectangle on a 12-column grid. One unit is a responsive square grid cell; dragging reflows neighboring widgets, and handles at each corner resize width and height in whole units while keeping the opposite corner in place. The handles support arrow-key movement and resizing. Layouts are saved per screen, and narrow screens use a full-width stack while retaining each widget’s wide-screen size.
 - **Screens:** Add and switch between screens with separate widget positions and visibility. New screens start with the default widget positions; widget data and appearance settings are shared across screens.
-- **Local persistence:** Notes, links, tasks, widget visibility and grid positions, clock options, calendar embed, theme, and size stay in this browser.
+- **Local persistence:** Notes, links, tasks, widget visibility, grid positions and sizes, clock options, calendar embed, and theme stay in this browser.
 - **News feed:** The selected RSS/Atom URL is saved locally and refreshes when Daymark loads.
 - **Photo gallery:** Live searches use Wikimedia Commons; selected backgrounds load from Wikimedia's image CDN. Daily photos use the first 50 matching results and rotate by date.
 
@@ -60,7 +58,6 @@ To use Daymark as your browser homepage, host it over HTTPS or keep it available
 
 - Weather asks for location only when you first select **Get local weather**. The coordinates are saved in this browser and the forecast loads automatically on later visits. Geolocation requires HTTPS or localhost. The forecast is provided by [Open-Meteo](https://open-meteo.com/).
 - Google Calendar accepts a Calendar ID from **Settings for my calendars** → your calendar → **Integrate calendar**; Daymark builds the embed URL. Private calendars may require viewers to be signed in. Only make a calendar public if its events are safe for anyone to see.
-- Browsers may restrict opening `file://` paths or app-specific URLs from the launchpad. Behavior depends on browser and operating system.
 - ChatGPT search opens an external ChatGPT page with the query in the URL.
 - The News widget retrieves feeds through [RSS2JSON](https://rss2json.com/) to work around browser CORS restrictions. This public service receives the feed URL; unauthenticated requests may be rate-limited by the provider.
 
@@ -85,7 +82,6 @@ To use Daymark as your browser homepage, host it over HTTPS or keep it available
         |-- task-list-widget.js
         |-- calculator-widget.js
         |-- calendar-widget.js
-        |-- launchpad-widget.js
         `-- news-feed-widget.js
 ```
 
