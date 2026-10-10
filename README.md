@@ -38,9 +38,9 @@ Use the left icon rail to show or hide widgets, drag a widget by its grip to rea
 - **Backgrounds:** Choose a theme color independently from the background photo. Photos can be switched off, selected from the searchable Wikimedia Commons gallery, or changed daily using a search term.
 - **Five widget densities:** Ultra-dense, Tiny, Dense, Compact, and Standard. Standard is the largest.
 - **Widget visibility:** Toggle individual widgets from the left icon rail.
-- **Widget order:** Drag widgets by their grip; changes are saved automatically.
-- **Screens:** Add and switch between screens with separate widget order and visibility. Widget data and appearance settings are shared across screens.
-- **Local persistence:** Notes, links, tasks, widget visibility, order, clock options, calendar embed, theme, and size stay in this browser.
+- **Widget layout:** Arrange widgets on a 12-column grid by dragging any widget border. Existing widget sizes are preserved, overlaps are allowed, grid cells have equal horizontal and vertical steps on wide screens, positions are saved per screen, and arrow keys on the focusable top border move a widget one cell at a time. Narrow screens keep a stacked layout.
+- **Screens:** Add and switch between screens with separate widget positions and visibility. New screens start with the default widget positions; widget data and appearance settings are shared across screens.
+- **Local persistence:** Notes, links, tasks, widget visibility and grid positions, clock options, calendar embed, theme, and size stay in this browser.
 - **News feed:** The selected RSS/Atom URL is saved locally and refreshes when Daymark loads.
 - **Photo gallery:** Live searches use Wikimedia Commons; selected backgrounds load from Wikimedia's image CDN. Daily photos use the first 50 matching results and rotate by date.
 

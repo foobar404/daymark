@@ -3,11 +3,67 @@ import { THEME_IDS } from './themes.js';
 import { SEARCH_ENGINES } from './search-engines.js';
 import { BACKGROUND_IMAGE_IDS, isCommonsBackgroundUrl } from './background-images.js';
 
-const DEFAULT_WIDGET_ORDER = ['search', 'news', 'clock', 'weather', 'links', 'notes', 'tasks', 'calculator', 'calendar', 'launchpad'];
+export const WIDGET_GRID_COLUMNS = 12;
+export const WIDGET_GRID_SPANS = {
+  search: 12,
+  news: 7,
+  clock: 6,
+  weather: 5,
+  links: 6,
+  notes: 7,
+  tasks: 7,
+  calculator: 5,
+  calendar: 7,
+  launchpad: 5,
+};
+
+export const DEFAULT_WIDGET_ORDER = ['search', 'news', 'clock', 'weather', 'links', 'notes', 'tasks', 'calculator', 'calendar', 'launchpad'];
+
+export function createDefaultWidgetPlacements(order = DEFAULT_WIDGET_ORDER) {
+  const placements = {};
+  let column = 1;
+  let row = 1;
+  order.forEach((id) => {
+    const span = WIDGET_GRID_SPANS[id];
+    if (column + span - 1 > WIDGET_GRID_COLUMNS) {
+      row += 1;
+      column = 1;
+    }
+    placements[id] = { column, row };
+    column += span;
+    if (column > WIDGET_GRID_COLUMNS) {
+      row += 1;
+      column = 1;
+    }
+  });
+  return placements;
+}
+
+function normalizeWidgetPlacements(value, order) {
+  const defaults = createDefaultWidgetPlacements(order);
+  const placements = {};
+  order.forEach((id) => {
+    const saved = value?.[id];
+    const span = WIDGET_GRID_SPANS[id];
+    const column = Number.isInteger(saved?.column) ? saved.column : defaults[id].column;
+    const row = Number.isInteger(saved?.row) ? Math.min(Math.max(saved.row, 1), 10000) : defaults[id].row;
+    const validColumn = column >= 1 && column + span - 1 <= WIDGET_GRID_COLUMNS;
+    const nextColumn = validColumn ? column : defaults[id].column;
+
+    placements[id] = { column: nextColumn, row };
+  });
+  return placements;
+}
 
 export const DEFAULT_SETTINGS = {
   order: [...DEFAULT_WIDGET_ORDER],
-  screens: [{ id: 'screen-1', name: 'Screen 1', order: [...DEFAULT_WIDGET_ORDER], hiddenWidgets: [] }],
+  screens: [{
+    id: 'screen-1',
+    name: 'Screen 1',
+    order: [...DEFAULT_WIDGET_ORDER],
+    hiddenWidgets: [],
+    placements: createDefaultWidgetPlacements(DEFAULT_WIDGET_ORDER),
+  }],
   activeScreenId: 'screen-1',
   links: [
     { title: 'MDN', url: 'https://developer.mozilla.org/', color: '#dceee1' },
@@ -57,20 +113,24 @@ function normalizeSettings(value) {
       const id = typeof screen.id === 'string' && screen.id.trim() ? screen.id.trim().slice(0, 100) : `screen-${index + 1}`;
       if (screenIds.has(id)) return [];
       screenIds.add(id);
+      const order = normalizeOrder(screen.order ?? value.order);
       return [{
         id,
         name: typeof screen.name === 'string' && screen.name.trim() ? screen.name.trim().slice(0, 40) : `Screen ${index + 1}`,
-        order: normalizeOrder(screen.order),
+        order,
         hiddenWidgets: normalizeHiddenWidgets(screen.hiddenWidgets),
+        placements: normalizeWidgetPlacements(screen.placements, order),
       }];
     })
     : [];
   if (!screens.length) {
+    const order = normalizeOrder(value.order);
     screens = [{
       id: 'screen-1',
       name: 'Screen 1',
-      order: normalizeOrder(value.order),
+      order,
       hiddenWidgets: normalizeHiddenWidgets(value.hiddenWidgets),
+      placements: normalizeWidgetPlacements(null, order),
     }];
   }
   const activeScreen = screens.find((screen) => screen.id === value.activeScreenId) ?? screens[0];

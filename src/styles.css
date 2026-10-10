@@ -14,6 +14,7 @@
   --widget-padding: 19px;
   --widget-header-height: 48px;
   --feature-widget-height: 188px;
+  --widget-grid-cell-size: 24px;
   font-family: 'DM Sans', 'Segoe UI', sans-serif;
   font-synthesis: none;
   text-rendering: optimizeLegibility;
@@ -134,20 +135,10 @@ button:focus-visible, a:focus-visible, input:focus-visible, textarea:focus-visib
 .brand__logo { width: 24px; height: 24px; flex: none; object-fit: contain; }
 :where([hidden]) { display: none !important; }
 
-.widget-grid { display: grid; grid-template-columns: repeat(12, minmax(0, 1fr)); gap: var(--widget-gap); padding: 8px 0 28px; }
-search-widget { grid-column: 1 / -1; }
-news-feed-widget { grid-column: span 7; }
-clock-widget { grid-column: span 6; }
-weather-widget { grid-column: span 5; }
-links-widget { grid-column: span 6; }
-notes-widget { grid-column: span 7; }
-task-list-widget { grid-column: span 7; }
-calculator-widget { grid-column: span 5; }
-calendar-widget { grid-column: span 7; }
-launchpad-widget { grid-column: span 5; }
+.widget-grid { --widget-grid-cell-size: 24px; display: grid; grid-template-columns: repeat(12, minmax(0, 1fr)); grid-auto-rows: var(--widget-grid-cell-size); align-items: start; gap: var(--widget-gap); padding: 8px 0 28px; }
 
 clock-widget, search-widget, news-feed-widget, weather-widget, links-widget, notes-widget, task-list-widget, calculator-widget, calendar-widget, launchpad-widget { display: block; min-width: 0; }
-.widget__panel { min-height: 100%; overflow: hidden; border: 1px solid rgba(216, 227, 219, 0.95); border-radius: 6px; background: var(--surface); box-shadow: var(--shadow); backdrop-filter: blur(12px); transition: border-color 180ms, transform 180ms, box-shadow 180ms; }
+.widget__panel { position: relative; min-height: 100%; overflow: hidden; border: 1px solid rgba(216, 227, 219, 0.95); border-radius: 6px; background: var(--surface); box-shadow: var(--shadow); backdrop-filter: blur(12px); transition: border-color 180ms, transform 180ms, box-shadow 180ms; }
 :root[data-container-background='transparent'] .widget__panel { border-color: color-mix(in srgb, var(--line) 55%, transparent); background: color-mix(in srgb, var(--paper) 75%, transparent); backdrop-filter: none; }
 :root[data-container-background='glass'] .widget__panel { border-color: color-mix(in srgb, var(--line) 72%, transparent); background: color-mix(in srgb, var(--surface) 58%, transparent); backdrop-filter: blur(18px) saturate(125%); }
 .widget-grid > :nth-child(1) .widget__panel { animation-delay: 30ms; }
@@ -160,21 +151,19 @@ clock-widget, search-widget, news-feed-widget, weather-widget, links-widget, not
 .widget__header { min-height: var(--widget-header-height); padding: 0 4px; display: flex; align-items: center; justify-content: space-between; gap: 12px; border-bottom: 1px solid var(--line); }
 .widget__title { margin: 0; }
 .widget__icon { display: grid; width: 27px; height: 27px; place-items: center; color: var(--green); font-size: 22px; line-height: 1; }
-.widget__tools { display: flex; align-items: center; gap: 5px; }
-.widget__drag { width: 27px; height: 27px; display: grid; place-items: center; border: 1px solid var(--line); border-radius: 3px; padding: 0; background: var(--button-surface); color: var(--ink); font-size: 18px; cursor: grab; touch-action: none; user-select: none; }
-.widget__drag:active { cursor: grabbing; }
-.widget__drag:hover { border-color: var(--green); color: var(--green); }
 .widget__content { padding: var(--widget-padding); }
-.is-dragging { opacity: 0.4; }
-.is-drop-target .widget__panel { position: relative; }
-.is-drop-target[data-drop-position='above'] .widget__panel::before,
-.is-drop-target[data-drop-position='below'] .widget__panel::after { position: absolute; z-index: 1; right: 0; left: 0; height: 3px; background: var(--accent); content: ''; }
-.is-drop-target[data-drop-position='above'] .widget__panel::before { top: 0; }
-.is-drop-target[data-drop-position='below'] .widget__panel::after { bottom: 0; }
-.is-drop-target[data-drop-position='left'] .widget__panel::before,
-.is-drop-target[data-drop-position='right'] .widget__panel::after { position: absolute; z-index: 1; top: 0; bottom: 0; width: 3px; background: var(--accent); content: ''; }
-.is-drop-target[data-drop-position='left'] .widget__panel::before { left: 0; }
-.is-drop-target[data-drop-position='right'] .widget__panel::after { right: 0; }
+.is-dragging { z-index: 2; opacity: 0.72; }
+.is-grid-dragging .widget__panel { user-select: none; }
+.widget__drag-border { position: absolute; z-index: 2; display: block; background: transparent; cursor: grab; touch-action: none; user-select: none; transition: background-color 140ms; }
+.widget__drag-border:hover { background: color-mix(in srgb, var(--green) 26%, transparent); }
+.widget__drag-border:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; background: color-mix(in srgb, var(--green) 26%, transparent); }
+.widget__drag-border--top, .widget__drag-border--bottom { right: 0; left: 0; height: 9px; }
+.widget__drag-border--top { top: 0; }
+.widget__drag-border--bottom { bottom: 0; }
+.widget__drag-border--left, .widget__drag-border--right { top: 9px; bottom: 9px; width: 9px; }
+.widget__drag-border--left { left: 0; }
+.widget__drag-border--right { right: 0; }
+.is-grid-dragging .widget__drag-border { cursor: grabbing; }
 
 .search-widget__form { display: flex; align-items: center; gap: 12px; }
 .search-widget__form input { flex: 1; min-width: 0; height: 50px; padding: 0 14px; border: 1px solid var(--line); border-radius: 4px; background: var(--field); color: var(--ink); font-size: 15px; }
@@ -385,14 +374,13 @@ clock-widget, search-widget, news-feed-widget, weather-widget, links-widget, not
   .page-shell { width: 100%; }
   .masthead { height: 50px; }
   .widget__header { gap: 6px; padding-inline: 10px; }
-  .widget__drag { width: 23px; height: 23px; }
   :root { --widget-gap: 12px; --widget-padding: 16px; --widget-header-height: 46px; --feature-widget-height: 162px; }
   :root[data-widget-size='tiny'] { --widget-gap: 7px; --widget-padding: 8px; --widget-header-height: 36px; --feature-widget-height: 120px; }
   :root[data-widget-size='compact'] { --widget-gap: 10px; --widget-padding: 12px; --widget-header-height: 40px; --feature-widget-height: 140px; }
   :root[data-widget-size='dense'] { --widget-gap: 8px; --widget-padding: 10px; --widget-header-height: 36px; --feature-widget-height: 126px; }
   :root[data-widget-size='ultra-dense'] { --widget-gap: 6px; --widget-padding: 6px; --widget-header-height: 32px; --feature-widget-height: 104px; }
-  .widget-grid { grid-template-columns: minmax(0, 1fr); }
-  search-widget, news-feed-widget, clock-widget, weather-widget, links-widget, notes-widget, task-list-widget, calculator-widget, calendar-widget, launchpad-widget { grid-column: 1; }
+  .widget-grid { grid-template-columns: minmax(0, 1fr); grid-auto-rows: auto; }
+  .widget-grid > * { grid-column: 1 / -1 !important; grid-row: auto !important; }
   .search-widget__form { align-items: stretch; flex-direction: column; }
   .search-widget__form .button { align-self: flex-start; }
   .clock-widget__time { font-size: 48px; }

@@ -9,7 +9,14 @@ import './components/calculator-widget.js';
 import './components/calendar-widget.js';
 import './components/launchpad-widget.js';
 import { WIDGET_ICONS } from './components/widget-element.js';
-import { readSettings, writeSettings } from './storage.js';
+import {
+  createDefaultWidgetPlacements,
+  DEFAULT_WIDGET_ORDER,
+  readSettings,
+  writeSettings,
+  WIDGET_GRID_COLUMNS,
+  WIDGET_GRID_SPANS,
+} from './storage.js';
 import { THEMES } from './themes.js';
 import { BACKGROUND_IMAGES, isCommonsBackgroundUrl } from './background-images.js';
 
@@ -20,7 +27,9 @@ const screenNavStatus = document.querySelector('#screen-nav-status');
 const settingsDialog = document.querySelector('#settings-dialog');
 const themeColorMeta = document.querySelector('meta[name="theme-color"]');
 const settings = readSettings();
-let draggedWidget = null;
+let widgetDrag = null;
+let widgetGridCellSize = 24;
+let gridLayoutRefreshScheduled = false;
 const widgetOptions = [
   { id: 'search', title: 'Search' },
   { id: 'news', title: 'News' },
@@ -352,7 +361,11 @@ settingsDialog.addEventListener('change', (event) => {
   if (event.target.name === 'container-background') current.containerBackground = event.target.value;
   writeSettings(current);
   if (event.target.name === 'theme') applyTheme(current.theme);
-  if (event.target.name === 'widget-size') document.documentElement.dataset.widgetSize = current.widgetSize;
+  if (event.target.name === 'widget-size') {
+    document.documentElement.dataset.widgetSize = current.widgetSize;
+    syncGridCellSize();
+    scheduleWidgetLayoutRefresh();
+  }
   if (event.target.name === 'container-background') applyContainerBackground(current.containerBackground);
   if (event.target.name === 'background-mode') {
     applyBackground(current);
@@ -375,20 +388,111 @@ if (settings.dailyBackgroundEnabled) {
   }
 }
 
-function persistOrder() {
+function applyOrder(order) {
+  const widgets = new Map([...grid.children].map((widget) => [widget.id, widget]));
+  order.forEach((id, index) => {
+    const widget = widgets.get(id);
+    if (widget && grid.children[index] !== widget) {
+      grid.insertBefore(widget, grid.children[index] ?? null);
+    }
+  });
+}
+
+function getPlacementOrder(placements) {
+  return [...grid.children]
+    .map((widget) => widget.id)
+    .sort((first, second) => {
+      const firstPosition = placements[first] ?? { row: 1, column: 1 };
+      const secondPosition = placements[second] ?? { row: 1, column: 1 };
+      return firstPosition.row - secondPosition.row
+        || firstPosition.column - secondPosition.column
+        || first.localeCompare(second);
+    });
+}
+
+function applyWidgetLayout(screen) {
+  syncGridCellSize();
+  applyOrder(getPlacementOrder(screen.placements));
+  [...grid.children].forEach((widget) => {
+    const position = screen.placements[widget.id];
+    if (!position) return;
+    widget.style.gridColumn = `${position.column} / span ${WIDGET_GRID_SPANS[widget.id]}`;
+    widget.style.gridRow = `${position.row} / span 1`;
+  });
+  const rowSpans = measureWidgetRowSpans();
+  screen.order = getPlacementOrder(screen.placements);
+  applyOrder(screen.order);
+  applyWidgetGridPositions(screen.placements, rowSpans);
+}
+
+function measureWidgetRowSpans() {
+  const rowGap = Number.parseFloat(window.getComputedStyle(grid).rowGap) || 0;
+  const rowPitch = widgetGridCellSize + rowGap;
+  const rowSpans = {};
+  [...grid.children].forEach((widget) => {
+    let rowSpan = Number.parseInt(widget.dataset.gridRowSpan, 10) || 1;
+    if (!widget.hidden) {
+      const panel = widget.querySelector('.widget__panel');
+      const header = widget.querySelector('.widget__header');
+      const content = widget.querySelector('.widget__content');
+      if (panel && header && content) {
+        const panelStyle = window.getComputedStyle(panel);
+        const naturalHeight = header.getBoundingClientRect().height
+          + content.scrollHeight
+          + (Number.parseFloat(panelStyle.borderTopWidth) || 0)
+          + (Number.parseFloat(panelStyle.borderBottomWidth) || 0);
+        rowSpan = Math.max(1, Math.ceil((naturalHeight + rowGap) / rowPitch));
+      }
+    }
+    widget.dataset.gridRowSpan = String(rowSpan);
+    rowSpans[widget.id] = rowSpan;
+  });
+  return rowSpans;
+}
+
+function applyWidgetGridPositions(placements, rowSpans) {
+  [...grid.children].forEach((widget) => {
+    const position = placements[widget.id];
+    if (!position) return;
+    widget.style.gridColumn = `${position.column} / span ${WIDGET_GRID_SPANS[widget.id]}`;
+    widget.style.gridRow = `${position.row} / span ${rowSpans[widget.id] ?? 1}`;
+  });
+}
+
+function persistWidgetPlacements(placements) {
+  const current = readSettings();
+  const screen = current.screens.find(({ id }) => id === current.activeScreenId);
+  if (!screen) return false;
+  screen.placements = placements;
+  applyWidgetLayout(screen);
+  current.order = screen.order;
+  if (!writeSettings(current)) {
+    showScreenStatus('Could not save this screen’s widget positions.');
+    const saved = readSettings().screens.find(({ id }) => id === current.activeScreenId);
+    if (saved) applyWidgetLayout(saved);
+    return false;
+  }
+  showScreenStatus('');
+  return true;
+}
+
+function refreshActiveWidgetLayout() {
+  syncGridCellSize();
   const current = readSettings();
   const screen = current.screens.find(({ id }) => id === current.activeScreenId);
   if (!screen) return;
-  screen.order = [...grid.children].map((widget) => widget.id);
-  current.order = screen.order;
-  if (!writeSettings(current)) showScreenStatus('Could not save this screen’s widget order.');
+  const rowSpans = measureWidgetRowSpans();
+  const order = getPlacementOrder(screen.placements);
+  applyOrder(order);
+  applyWidgetGridPositions(screen.placements, rowSpans);
 }
 
-function applyOrder(order) {
-  const widgets = new Map([...grid.children].map((widget) => [widget.id, widget]));
-  order.forEach((id) => {
-    const widget = widgets.get(id);
-    if (widget) grid.append(widget);
+function scheduleWidgetLayoutRefresh() {
+  if (gridLayoutRefreshScheduled) return;
+  gridLayoutRefreshScheduled = true;
+  window.requestAnimationFrame(() => {
+    gridLayoutRefreshScheduled = false;
+    if (!widgetDrag) refreshActiveWidgetLayout();
   });
 }
 
@@ -409,15 +513,21 @@ function showScreenStatus(message) {
 }
 
 function applyScreen(current, screen) {
+  const previousScreenId = current.activeScreenId;
   current.activeScreenId = screen.id;
-  current.order = [...screen.order];
   current.hiddenWidgets = [...screen.hiddenWidgets];
+  applyVisibility(screen.hiddenWidgets);
+  applyWidgetLayout(screen);
+  current.order = [...screen.order];
   if (!writeSettings(current)) {
     showScreenStatus('Could not save the screen configuration.');
+    const saved = readSettings();
+    applyVisibility(saved.hiddenWidgets);
+    const previousScreen = saved.screens.find(({ id }) => id === previousScreenId);
+    if (previousScreen) applyWidgetLayout(previousScreen);
     return false;
   }
   showScreenStatus('');
-  applyOrder(screen.order);
   renderScreenNav();
   renderWidgetNav();
   applyVisibility(screen.hiddenWidgets);
@@ -491,8 +601,9 @@ function renderScreenNav() {
     const newScreen = {
       id: `screen-${Date.now().toString(36)}-${Math.random().toString(36).slice(2)}`,
       name: `Screen ${number}`,
-      order: [...currentScreen.order],
+      order: [...DEFAULT_WIDGET_ORDER],
       hiddenWidgets: [...currentScreen.hiddenWidgets],
+      placements: createDefaultWidgetPlacements(),
     };
     latest.screens.push(newScreen);
     if (applyScreen(latest, newScreen)) showScreenStatus(`Page ${number} added.`);
@@ -532,79 +643,241 @@ function renderWidgetNav() {
       }
       showScreenStatus('');
       applyVisibility(current.hiddenWidgets);
+      scheduleWidgetLayoutRefresh();
     });
     widgetNav.append(button);
   });
 }
 
-function findDropPosition(x, y) {
-  const candidates = [...grid.children]
-    .filter((widget) => widget !== draggedWidget && !widget.hidden)
-    .map((widget) => {
-      const bounds = widget.getBoundingClientRect();
-      const outsideX = Math.max(bounds.left - x, 0, x - bounds.right);
-      const outsideY = Math.max(bounds.top - y, 0, y - bounds.bottom);
-      return { widget, bounds, distance: Math.hypot(outsideX, outsideY) };
-    })
-    .sort((first, second) => first.distance - second.distance);
-  const nearest = candidates[0];
-  if (!nearest) return null;
-
-  const centerX = nearest.bounds.left + nearest.bounds.width / 2;
-  const centerY = nearest.bounds.top + nearest.bounds.height / 2;
-  const horizontal = Math.abs(x - centerX) / nearest.bounds.width > Math.abs(y - centerY) / nearest.bounds.height;
-  const edge = horizontal ? (x >= centerX ? 'right' : 'left') : (y >= centerY ? 'below' : 'above');
-  return { widget: nearest.widget, insertAfter: edge === 'right' || edge === 'below', edge };
+function parseTrackSizes(value) {
+  return value.match(/[\d.]+px/g)?.map((size) => Number.parseFloat(size)) ?? [];
 }
 
-applyOrder(settings.order);
+function syncGridCellSize() {
+  const columnSizes = parseTrackSizes(window.getComputedStyle(grid).gridTemplateColumns);
+  const nextSize = columnSizes[0];
+  if (!Number.isFinite(nextSize) || nextSize <= 0) return false;
+  const changed = Math.abs(nextSize - widgetGridCellSize) >= 0.5;
+  widgetGridCellSize = nextSize;
+  grid.style.setProperty('--widget-grid-cell-size', `${nextSize}px`);
+  return changed;
+}
+
+function getGridMetrics() {
+  const style = window.getComputedStyle(grid);
+  const columnSizes = parseTrackSizes(style.gridTemplateColumns);
+  const rowSizes = parseTrackSizes(style.gridTemplateRows);
+  const columnGap = Number.parseFloat(style.columnGap) || 0;
+  const rowGap = Number.parseFloat(style.rowGap) || 0;
+  const columnStarts = [];
+  const rowStarts = [];
+  let offset = 0;
+  columnSizes.forEach((size) => {
+    columnStarts.push(offset);
+    offset += size + columnGap;
+  });
+  offset = 0;
+  rowSizes.forEach((size) => {
+    rowStarts.push(offset);
+    offset += size + rowGap;
+  });
+  return {
+    columnStarts,
+    rowStarts,
+    rowSizes,
+    columnGap,
+    rowGap,
+    minRowSize: widgetGridCellSize,
+    paddingLeft: Number.parseFloat(style.paddingLeft) || 0,
+    paddingTop: Number.parseFloat(style.paddingTop) || 0,
+    borderLeft: Number.parseFloat(style.borderLeftWidth) || 0,
+    borderTop: Number.parseFloat(style.borderTopWidth) || 0,
+  };
+}
+
+function getRowOffset(metrics, row) {
+  const index = row - 1;
+  if (index < metrics.rowStarts.length) return metrics.rowStarts[index];
+  if (!metrics.rowStarts.length) return index * (metrics.minRowSize + metrics.rowGap);
+  const lastIndex = metrics.rowStarts.length - 1;
+  return metrics.rowStarts[lastIndex]
+    + metrics.rowSizes[lastIndex]
+    + metrics.rowGap
+    + (index - metrics.rowStarts.length) * (metrics.minRowSize + metrics.rowGap);
+}
+
+function nearestIndex(values, target) {
+  let nearest = 0;
+  values.forEach((value, index) => {
+    if (Math.abs(value - target) < Math.abs(values[nearest] - target)) nearest = index;
+  });
+  return nearest;
+}
+
+function getSnappedPlacement(event, drag) {
+  const bounds = grid.getBoundingClientRect();
+  const desiredColumn = event.clientX - drag.grabOffsetX - bounds.left - drag.metrics.borderLeft - drag.metrics.paddingLeft;
+  const desiredRow = event.clientY - drag.grabOffsetY - bounds.top - drag.metrics.borderTop - drag.metrics.paddingTop;
+  const span = WIDGET_GRID_SPANS[drag.widget.id];
+  const maxColumn = WIDGET_GRID_COLUMNS - span + 1;
+  const columnStarts = drag.metrics.columnStarts.length > 1
+    ? drag.metrics.columnStarts.slice(0, maxColumn)
+    : [0];
+  const column = drag.metrics.columnStarts.length > 1
+    ? nearestIndex(columnStarts, desiredColumn) + 1
+    : drag.originalPlacement.column;
+  const rowStarts = [...drag.metrics.rowStarts];
+  const rowSizes = [...drag.metrics.rowSizes];
+  if (!rowStarts.length) {
+    rowStarts.push(0);
+    rowSizes.push(drag.metrics.minRowSize);
+  }
+  while (desiredRow > rowStarts[rowStarts.length - 1] + rowSizes[rowSizes.length - 1] / 2 && rowStarts.length < 10000) {
+    const nextStart = rowStarts[rowStarts.length - 1] + rowSizes[rowSizes.length - 1] + drag.metrics.rowGap;
+    rowStarts.push(nextStart);
+    rowSizes.push(drag.metrics.minRowSize);
+  }
+  return {
+    column: Math.min(Math.max(column, 1), maxColumn),
+    row: nearestIndex(rowStarts, desiredRow) + 1,
+  };
+}
+
+function beginWidgetDrag(event) {
+  if (widgetDrag || event.button !== 0 || !event.isPrimary) return;
+  if (!(event.target instanceof Element)) return;
+  const dragRegion = event.target.closest('[data-drag-border]');
+  const widget = event.target.closest('clock-widget, search-widget, news-feed-widget, weather-widget, links-widget, notes-widget, task-list-widget, calculator-widget, calendar-widget, launchpad-widget');
+  if (!dragRegion || !widget || widget.hidden || !grid.contains(widget)) return;
+
+  const current = readSettings();
+  const screen = current.screens.find(({ id }) => id === current.activeScreenId);
+  const originalPlacement = screen?.placements[widget.id];
+  if (!originalPlacement) return;
+  const widgetBounds = widget.getBoundingClientRect();
+  widgetDrag = {
+    widget,
+    pointerId: event.pointerId,
+    startX: event.clientX,
+    startY: event.clientY,
+    grabOffsetX: event.clientX - widgetBounds.left,
+    grabOffsetY: event.clientY - widgetBounds.top,
+    initialTop: widgetBounds.top,
+    metrics: getGridMetrics(),
+    originalPlacement: { ...originalPlacement },
+    placement: { ...originalPlacement },
+    dragging: false,
+  };
+}
+
+function moveWidgetDrag(event) {
+  if (!widgetDrag || event.pointerId !== widgetDrag.pointerId) return;
+  if (!widgetDrag.dragging && Math.hypot(event.clientX - widgetDrag.startX, event.clientY - widgetDrag.startY) < 4) return;
+  if (!widgetDrag.dragging) {
+    widgetDrag.dragging = true;
+    widgetDrag.widget.classList.add('is-dragging');
+    grid.classList.add('is-grid-dragging');
+    grid.setPointerCapture(event.pointerId);
+  }
+  event.preventDefault();
+  widgetDrag.placement = getSnappedPlacement(event, widgetDrag);
+  widgetDrag.widget.style.gridColumn = `${widgetDrag.placement.column} / span ${WIDGET_GRID_SPANS[widgetDrag.widget.id]}`;
+  widgetDrag.widget.style.gridRow = `${widgetDrag.placement.row} / span 1`;
+  if (widgetDrag.metrics.columnStarts.length === 1) {
+    const targetTop = grid.getBoundingClientRect().top
+      + widgetDrag.metrics.borderTop
+      + widgetDrag.metrics.paddingTop
+      + getRowOffset(widgetDrag.metrics, widgetDrag.placement.row);
+    widgetDrag.widget.style.transform = `translateY(${targetTop - widgetDrag.initialTop}px)`;
+  }
+}
+
+function finishWidgetDrag(event, cancelled = false) {
+  if (!widgetDrag || event.pointerId !== widgetDrag.pointerId) return;
+  const drag = widgetDrag;
+  widgetDrag = null;
+  drag.widget.classList.remove('is-dragging');
+  drag.widget.style.transform = '';
+  grid.classList.remove('is-grid-dragging');
+
+  if (drag.dragging && !cancelled) {
+    const current = readSettings();
+    const screen = current.screens.find(({ id }) => id === current.activeScreenId);
+    if (screen) {
+      const placements = structuredClone(screen.placements);
+      placements[drag.widget.id] = drag.placement;
+      persistWidgetPlacements(placements);
+    }
+  } else {
+    const current = readSettings();
+    const screen = current.screens.find(({ id }) => id === current.activeScreenId);
+    if (screen) applyWidgetLayout(screen);
+  }
+}
+
+function moveWidgetByCell(widgetId, columnChange, rowChange) {
+  const current = readSettings();
+  const screen = current.screens.find(({ id }) => id === current.activeScreenId);
+  const placement = screen?.placements[widgetId];
+  if (!screen || !placement) return;
+  const span = WIDGET_GRID_SPANS[widgetId];
+  const placements = structuredClone(screen.placements);
+  placements[widgetId] = {
+    column: Math.min(Math.max(placement.column + columnChange, 1), WIDGET_GRID_COLUMNS - span + 1),
+    row: Math.min(Math.max(placement.row + rowChange, 1), 10000),
+  };
+  if (!persistWidgetPlacements(placements)) return;
+  const next = placements[widgetId];
+  const title = widgetOptions.find(({ id }) => id === widgetId)?.title ?? 'Widget';
+  showScreenStatus(`${title} moved to column ${next.column}, row ${next.row}.`);
+}
+
+const gridMoveKeys = {
+  ArrowLeft: [-1, 0],
+  ArrowRight: [1, 0],
+  ArrowUp: [0, -1],
+  ArrowDown: [0, 1],
+};
+
+grid.addEventListener('pointerdown', beginWidgetDrag);
+document.addEventListener('pointermove', moveWidgetDrag);
+document.addEventListener('pointerup', finishWidgetDrag);
+document.addEventListener('pointercancel', (event) => finishWidgetDrag(event, true));
+grid.addEventListener('keydown', (event) => {
+  if (!(event.target instanceof Element)) return;
+  const handle = event.target.closest('[data-drag-keyboard]');
+  const movement = gridMoveKeys[event.key];
+  if (!handle || !movement) return;
+  event.preventDefault();
+  const widget = handle.closest('clock-widget, search-widget, news-feed-widget, weather-widget, links-widget, notes-widget, task-list-widget, calculator-widget, calendar-widget, launchpad-widget');
+  if (widget) moveWidgetByCell(widget.id, ...movement);
+});
+
+applyVisibility(settings.hiddenWidgets);
+syncGridCellSize();
+const initialScreen = settings.screens.find(({ id }) => id === settings.activeScreenId);
+if (initialScreen) {
+  const previousOrder = JSON.stringify(initialScreen.order);
+  applyWidgetLayout(initialScreen);
+  settings.order = [...initialScreen.order];
+  if (previousOrder !== JSON.stringify(initialScreen.order) && !writeSettings(settings)) {
+    showScreenStatus('Could not save widget order.');
+  }
+}
 renderScreenNav();
 renderWidgetNav();
 applyVisibility(settings.hiddenWidgets);
 
-grid.addEventListener('dragstart', (event) => {
-  const handle = event.target.closest('[data-drag-handle]');
-  const widget = event.target.closest('clock-widget, search-widget, weather-widget, links-widget, notes-widget, task-list-widget, calculator-widget, calendar-widget, launchpad-widget');
-  if (!handle || !widget || widget.hidden) {
-    event.preventDefault();
-    return;
-  }
-  draggedWidget = widget;
-  widget.classList.add('is-dragging');
-  event.dataTransfer.effectAllowed = 'move';
-  event.dataTransfer.setData('text/plain', widget.id);
+let observedGridWidth = grid.getBoundingClientRect().width;
+const gridResizeObserver = new ResizeObserver(() => {
+  const nextWidth = grid.getBoundingClientRect().width;
+  if (Math.abs(nextWidth - observedGridWidth) < 0.5) return;
+  observedGridWidth = nextWidth;
+  if (syncGridCellSize()) scheduleWidgetLayoutRefresh();
 });
-
-grid.addEventListener('dragover', (event) => {
-  if (!draggedWidget) return;
-  event.preventDefault();
-  event.dataTransfer.dropEffect = 'move';
-  clearDropTarget();
-  const position = findDropPosition(event.clientX, event.clientY);
-  if (position) {
-    position.widget.classList.add('is-drop-target');
-    position.widget.dataset.dropPosition = position.edge;
-  }
-});
-
-grid.addEventListener('drop', (event) => {
-  if (!draggedWidget) return;
-  event.preventDefault();
-  const position = findDropPosition(event.clientX, event.clientY);
-  if (position) {
-    grid.insertBefore(draggedWidget, position.insertAfter ? position.widget.nextElementSibling : position.widget);
-    persistOrder();
-  }
-  clearDropTarget();
-});
-
-function clearDropTarget() {
-  grid.querySelectorAll('.is-drop-target').forEach((widget) => widget.classList.remove('is-drop-target'));
-  grid.querySelectorAll('[data-drop-position]').forEach((widget) => delete widget.dataset.dropPosition);
-}
-
-grid.addEventListener('dragend', () => {
-  draggedWidget?.classList.remove('is-dragging');
-  clearDropTarget();
-  draggedWidget = null;
+gridResizeObserver.observe(grid);
+const widgetResizeObserver = new ResizeObserver(scheduleWidgetLayoutRefresh);
+grid.querySelectorAll(':scope > *').forEach((widget) => widgetResizeObserver.observe(widget));
+window.addEventListener('resize', () => {
+  if (syncGridCellSize()) scheduleWidgetLayoutRefresh();
 });

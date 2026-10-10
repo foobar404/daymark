@@ -19,11 +19,7 @@ export class WidgetElement extends HTMLElement {
     const heading = document.createElement('header');
     heading.className = 'widget__header';
     heading.innerHTML = `
-      <h2 class="widget__title"><span class="widget__icon" aria-hidden="true"></span><span class="visually-hidden"></span></h2>
-      <div class="widget__tools" aria-label="Widget controls">
-        <button class="widget__drag" type="button" data-drag-handle aria-label="Drag to reorder widget" title="Drag to reorder">⠿</button>
-      </div>`;
-    heading.querySelector('[data-drag-handle]').draggable = true;
+      <h2 class="widget__title"><span class="widget__icon" aria-hidden="true"></span><span class="visually-hidden"></span></h2>`;
     const icon = heading.querySelector('.widget__icon');
     icon.textContent = WIDGET_ICONS[this.id] ?? '◈';
     icon.title = this.widgetTitle;
@@ -31,6 +27,20 @@ export class WidgetElement extends HTMLElement {
 
     const panel = document.createElement('section');
     panel.className = 'widget__panel';
+    ['top', 'right', 'bottom', 'left'].forEach((edge) => {
+      const dragBorder = document.createElement('span');
+      dragBorder.className = `widget__drag-border widget__drag-border--${edge}`;
+      dragBorder.dataset.dragBorder = '';
+      if (edge === 'top') {
+        dragBorder.dataset.dragKeyboard = '';
+        dragBorder.tabIndex = 0;
+        dragBorder.setAttribute('role', 'button');
+        dragBorder.setAttribute('aria-label', `Move ${this.widgetTitle} widget with arrow keys or by dragging`);
+      } else {
+        dragBorder.setAttribute('aria-hidden', 'true');
+      }
+      panel.append(dragBorder);
+    });
     panel.append(heading);
 
     const content = document.createElement('div');
