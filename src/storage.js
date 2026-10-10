@@ -3,8 +3,12 @@ import { THEME_IDS } from './themes.js';
 import { SEARCH_ENGINES } from './search-engines.js';
 import { BACKGROUND_IMAGE_IDS, isCommonsBackgroundUrl } from './background-images.js';
 
+const DEFAULT_WIDGET_ORDER = ['search', 'news', 'clock', 'weather', 'links', 'notes', 'tasks', 'calculator', 'calendar', 'launchpad'];
+
 export const DEFAULT_SETTINGS = {
-  order: ['search', 'news', 'clock', 'weather', 'links', 'notes', 'tasks', 'calculator', 'calendar', 'launchpad'],
+  order: [...DEFAULT_WIDGET_ORDER],
+  screens: [{ id: 'screen-1', name: 'Screen 1', order: [...DEFAULT_WIDGET_ORDER], hiddenWidgets: [] }],
+  activeScreenId: 'screen-1',
   links: [
     { title: 'MDN', url: 'https://developer.mozilla.org/', color: '#dceee1' },
     { title: 'GitHub', url: 'https://github.com/', color: '#e9e2f6' },
@@ -26,6 +30,9 @@ export const DEFAULT_SETTINGS = {
   backgroundImage: 'morning-light',
   backgroundImageTitle: '',
   backgroundImageCredit: '',
+  dailyBackgroundEnabled: false,
+  dailyBackgroundSearchTerm: 'landscape',
+  dailyBackgroundDate: '',
   widgetSize: 'standard',
   searchEngine: 'chatgpt',
 };
@@ -33,15 +40,42 @@ export const DEFAULT_SETTINGS = {
 function normalizeSettings(value) {
   if (!value || typeof value !== 'object') return structuredClone(DEFAULT_SETTINGS);
 
-  const widgetIds = DEFAULT_SETTINGS.order;
-  const savedOrder = Array.isArray(value.order) ? value.order : [];
-  const order = [
-    ...savedOrder.filter((id) => widgetIds.includes(id)),
-    ...widgetIds.filter((id) => !savedOrder.includes(id)),
-  ];
-  const hiddenWidgets = Array.isArray(value.hiddenWidgets)
-    ? [...new Set(value.hiddenWidgets.filter((id) => widgetIds.includes(id)))]
+  const widgetIds = DEFAULT_WIDGET_ORDER;
+  const normalizeOrder = (savedOrder) => {
+    const validOrder = Array.isArray(savedOrder)
+      ? [...new Set(savedOrder.filter((id) => widgetIds.includes(id)))]
+      : [];
+    return [...validOrder, ...widgetIds.filter((id) => !validOrder.includes(id))];
+  };
+  const normalizeHiddenWidgets = (savedHiddenWidgets) => Array.isArray(savedHiddenWidgets)
+    ? [...new Set(savedHiddenWidgets.filter((id) => widgetIds.includes(id)))]
     : [];
+  const screenIds = new Set();
+  let screens = Array.isArray(value.screens)
+    ? value.screens.flatMap((screen, index) => {
+      if (!screen || typeof screen !== 'object') return [];
+      const id = typeof screen.id === 'string' && screen.id.trim() ? screen.id.trim().slice(0, 100) : `screen-${index + 1}`;
+      if (screenIds.has(id)) return [];
+      screenIds.add(id);
+      return [{
+        id,
+        name: typeof screen.name === 'string' && screen.name.trim() ? screen.name.trim().slice(0, 40) : `Screen ${index + 1}`,
+        order: normalizeOrder(screen.order),
+        hiddenWidgets: normalizeHiddenWidgets(screen.hiddenWidgets),
+      }];
+    })
+    : [];
+  if (!screens.length) {
+    screens = [{
+      id: 'screen-1',
+      name: 'Screen 1',
+      order: normalizeOrder(value.order),
+      hiddenWidgets: normalizeHiddenWidgets(value.hiddenWidgets),
+    }];
+  }
+  const activeScreen = screens.find((screen) => screen.id === value.activeScreenId) ?? screens[0];
+  const order = activeScreen.order;
+  const hiddenWidgets = activeScreen.hiddenWidgets;
   const widgetSizes = ['tiny', 'compact', 'standard', 'dense', 'ultra-dense'];
   const legacyWidgetSizes = new Map([['spacious', 'dense'], ['large', 'ultra-dense']]);
   const savedWidgetSize = legacyWidgetSizes.get(value.widgetSize) ?? value.widgetSize;
@@ -117,6 +151,12 @@ function normalizeSettings(value) {
   const backgroundImage = BACKGROUND_IMAGE_IDS.includes(value.backgroundImage) || isCommonsBackgroundUrl(value.backgroundImage)
     ? value.backgroundImage
     : DEFAULT_SETTINGS.backgroundImage;
+  const dailyBackgroundSearchTerm = typeof value.dailyBackgroundSearchTerm === 'string'
+    ? value.dailyBackgroundSearchTerm.trim().slice(0, 100)
+    : DEFAULT_SETTINGS.dailyBackgroundSearchTerm;
+  const dailyBackgroundDate = typeof value.dailyBackgroundDate === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(value.dailyBackgroundDate)
+    ? value.dailyBackgroundDate
+    : '';
   let backgroundImageCredit = '';
   if (typeof value.backgroundImageCredit === 'string') {
     try {
@@ -140,6 +180,8 @@ function normalizeSettings(value) {
 
   return {
     order,
+    screens,
+    activeScreenId: activeScreen.id,
     links,
     linksDisplayStyle: ['grid', 'list', 'icons'].includes(value.linksDisplayStyle) ? value.linksDisplayStyle : DEFAULT_SETTINGS.linksDisplayStyle,
     notes: typeof value.notes === 'string' ? value.notes : '',
@@ -157,6 +199,9 @@ function normalizeSettings(value) {
     backgroundImage,
     backgroundImageTitle: typeof value.backgroundImageTitle === 'string' ? value.backgroundImageTitle.slice(0, 180) : '',
     backgroundImageCredit,
+    dailyBackgroundEnabled: Boolean(value.dailyBackgroundEnabled),
+    dailyBackgroundSearchTerm: dailyBackgroundSearchTerm || DEFAULT_SETTINGS.dailyBackgroundSearchTerm,
+    dailyBackgroundDate,
     widgetSize: widgetSizes.includes(savedWidgetSize) ? savedWidgetSize : DEFAULT_SETTINGS.widgetSize,
     searchEngine: SEARCH_ENGINES.some(({ id }) => id === value.searchEngine) ? value.searchEngine : DEFAULT_SETTINGS.searchEngine,
   };

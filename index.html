@@ -21,6 +21,8 @@
       </header>
       <nav class="widget-nav" id="widget-nav" aria-label="Widgets"></nav>
       <main class="page-shell">
+        <nav class="screen-nav" id="screen-nav" aria-label="Screens"></nav>
+        <p class="screen-nav__status" id="screen-nav-status" role="status" aria-live="polite"></p>
         <section class="widget-grid" aria-label="Homepage widgets">
           <search-widget id="search"></search-widget>
           <news-feed-widget id="news"></news-feed-widget>
@@ -45,31 +47,6 @@
         <h2 id="settings-title">Settings</h2>
         <button class="settings-dialog__close" id="settings-close" type="button" aria-label="Close settings">×</button>
       </header>
-      <fieldset class="background-modes container-background-options">
-        <legend>Background Style</legend>
-        <label><input type="radio" name="container-background" value="solid"><span>Solid</span></label>
-        <label><input type="radio" name="container-background" value="transparent"><span>Transparent</span></label>
-        <label><input type="radio" name="container-background" value="glass"><span>Glass</span></label>
-      </fieldset>
-      <fieldset class="background-modes">
-        <legend>Wallpaper</legend>
-        <label><input type="radio" name="background-mode" value="color"><span>Solid colors</span></label>
-        <label><input type="radio" name="background-mode" value="photo"><span>Photos</span></label>
-      </fieldset>
-      <fieldset class="theme-options">
-        <legend>Theme</legend>
-      </fieldset>
-      <fieldset class="photo-options" hidden>
-        <legend>Browse Wikimedia Commons</legend>
-        <form class="photo-search">
-          <label class="visually-hidden" for="photo-search-query">Search photos</label>
-          <input id="photo-search-query" type="search" value="landscape" placeholder="Search photos on Commons">
-          <button class="button button--accent" type="submit">Search</button>
-        </form>
-        <p class="photo-gallery__status" role="status" aria-live="polite">Search for landscape, ocean, forest, or another subject.</p>
-        <div class="photo-gallery__results"></div>
-        <button class="text-button photo-gallery__more" type="button" hidden>Load more photos</button>
-      </fieldset>
       <fieldset class="size-options">
         <legend>Widget size</legend>
         <label class="size-option">
@@ -92,6 +69,46 @@
           <input type="radio" name="widget-size" value="standard">
           <span>Standard</span>
         </label>
+      </fieldset>
+      <fieldset class="background-modes container-background-options">
+        <legend>Background Style</legend>
+        <label><input type="radio" name="container-background" value="solid"><span>Solid</span></label>
+        <label><input type="radio" name="container-background" value="transparent"><span>Transparent</span></label>
+        <label><input type="radio" name="container-background" value="glass"><span>Glass</span></label>
+      </fieldset>
+      <fieldset class="theme-options">
+        <legend>Theme color</legend>
+      </fieldset>
+      <fieldset class="background-modes">
+        <legend>Background photo</legend>
+        <label><input type="radio" name="background-mode" value="color"><span>Off</span></label>
+        <label><input type="radio" name="background-mode" value="photo"><span>On</span></label>
+      </fieldset>
+      <fieldset class="daily-photo-settings">
+        <legend>Daily photo</legend>
+        <label class="daily-photo-settings__toggle">
+          <input id="daily-photo-enabled" type="checkbox">
+          <span>Change the background photo daily</span>
+        </label>
+        <form class="daily-photo-search" hidden>
+          <label for="daily-photo-query">Search term</label>
+          <div>
+            <input id="daily-photo-query" type="search" value="landscape" maxlength="100" placeholder="e.g. mountains">
+            <button class="button button--accent" type="submit">Apply</button>
+          </div>
+        </form>
+        <p class="daily-photo-status" role="status" aria-live="polite">Choose a search term to find a new Wikimedia Commons photo each day.</p>
+      </fieldset>
+      <fieldset class="photo-options" hidden>
+        <legend>Choose a photo</legend>
+        <form class="photo-search">
+          <label class="visually-hidden" for="photo-search-query">Search photos</label>
+          <input id="photo-search-query" type="search" value="landscape" placeholder="Search photos on Commons">
+          <button class="button button--accent" type="submit">Search</button>
+        </form>
+        <p class="photo-gallery__status" role="status" aria-live="polite">Search for landscape, ocean, forest, or another subject.</p>
+        <div class="photo-gallery__results"></div>
+        <button class="text-button photo-gallery__more" type="button" hidden>Load more photos</button>
       </fieldset>
     </dialog>
   </body>

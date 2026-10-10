@@ -35,13 +35,14 @@ Use the left icon rail to show or hide widgets, drag a widget by its grip to rea
 
 ## Personalize
 
-- **Backgrounds:** Twenty solid color themes remain available, plus a searchable, paginated Wikimedia Commons photo gallery.
+- **Backgrounds:** Choose a theme color independently from the background photo. Photos can be switched off, selected from the searchable Wikimedia Commons gallery, or changed daily using a search term.
 - **Five widget densities:** Ultra-dense, Tiny, Dense, Compact, and Standard. Standard is the largest.
 - **Widget visibility:** Toggle individual widgets from the left icon rail.
 - **Widget order:** Drag widgets by their grip; changes are saved automatically.
+- **Screens:** Add and switch between screens with separate widget order and visibility. Widget data and appearance settings are shared across screens.
 - **Local persistence:** Notes, links, tasks, widget visibility, order, clock options, calendar embed, theme, and size stay in this browser.
 - **News feed:** The selected RSS/Atom URL is saved locally and refreshes when Daymark loads.
-- **Photo gallery:** Live searches use Wikimedia Commons; selected backgrounds load from Wikimedia's image CDN.
+- **Photo gallery:** Live searches use Wikimedia Commons; selected backgrounds load from Wikimedia's image CDN. Daily photos use the first 50 matching results and rotate by date.
 
 ## Run locally
 
